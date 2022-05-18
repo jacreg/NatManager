@@ -25,11 +25,14 @@ namespace NatManager
                 WMICleanup();
                 WMISetSharing(args[1], "");
             }
-            else
+            else if (args[0] == "hnet")
             {
                 NetCleanupSetSharing(args[1], args[2]);
             }
-            
+            else                
+            {
+                ShowUsage();
+            }
         }
         static void ShowUsage()
         {

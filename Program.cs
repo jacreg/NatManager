@@ -19,7 +19,6 @@ namespace NatManager
                 ShowUsage();
                 return;
             }
-
             if (args[0] == "wmi")
             {
                 WMICleanup();

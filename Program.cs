@@ -12,32 +12,36 @@ namespace NatManager
 {
     internal class Program
     {
-        static void Main(string[] args)
+        static int Main(string[] args)
         {
-            if (args.Length != 3)
+            try
             {
-                ShowUsage();
-                return;
+                if (args.Length == 3 && args[0] == "wmi")
+                {
+                    WMICleanup();
+                    WMISetSharing(args[1], args[2]);
+                }
+                else if (args.Length == 3 && args[0] == "hnet")
+                {
+                    NetCleanupSetSharing(args[1], args[2]);
+                }
+                else
+                {
+                    ShowUsage();
+                }
             }
-            if (args[0] == "wmi")
+            catch (Exception ex)
             {
-                WMICleanup();
-                WMISetSharing(args[1], "");
+                Console.WriteLine(ex.Message);
+                return 1;
             }
-            else if (args[0] == "hnet")
-            {
-                NetCleanupSetSharing(args[1], args[2]);
-            }
-            else                
-            {
-                ShowUsage();
-            }
+            return 0;
         }
         static void ShowUsage()
         {
             Console.WriteLine("Usage:");
             Console.WriteLine("natmanager                                           - show usage");
-            Console.WriteLine("natmanager wmi <printer interface ip>                - set nat using wmi");
+            Console.WriteLine("natmanager wmi  <printer interface ip> <printer ip>  - set nat using wmi");
             Console.WriteLine("natmanager hnet <printer interface ip> <printer ip>  - set nat and port forwarding using hnetcfg");
             Console.WriteLine();
 
@@ -55,9 +59,11 @@ namespace NatManager
         static void NetCleanupSetSharing(string posnetip, string printerip)
         { 
             INetSharingManager SharingManager = new NetSharingManager();
-            INetSharingConfiguration posnet = null;
+            INetSharingConfiguration posnetsc = null;
             string posnetguid = null;
-            INetSharingConfiguration lan = null;
+            INetConnectionProps posnetp = null;
+            INetSharingConfiguration lansc = null;
+            INetConnectionProps lanp = null;
 
             foreach (INetConnection n in SharingManager.EnumEveryConnection)
             {
@@ -69,25 +75,34 @@ namespace NatManager
                 {
                     if (p.DeviceName.ToLower().Contains("posnet"))
                     {
-                        posnet = c;
+                        posnetsc = c;
                         posnetguid = p.Guid;
+                        posnetp = p;
                     }
                     else if (!p.DeviceName.ToLower().Contains("hyper-v") && p.Status == tagNETCON_STATUS.NCS_CONNECTED)
                     {
-                        lan = c;
+                        lansc = c;
+                        lanp = p;
                     }
                 }
             }
-            if (posnet != null && lan != null)
-            {
-                posnet.EnableSharing(tagSHARINGCONNECTIONTYPE.ICSSHARINGTYPE_PRIVATE);
-                lan.EnableSharing(tagSHARINGCONNECTIONTYPE.ICSSHARINGTYPE_PUBLIC);
-                WMISetIP(posnetguid, posnetip, "255.255.255.0");
+            WMICleanup();
 
-                var m = lan.AddPortMapping("FSP", 17 , 2121, 2121, 0, printerip, tagICS_TARGETTYPE.ICSTT_IPADDRESS);
-                m.Enable();
-            }
-            
+            if (posnetsc == null)
+                throw new ApplicationException("ERROR: Cannot find printer interface");
+            if (lansc == null)
+                throw new ApplicationException("ERROR: Cannot find lan interface");
+
+            lansc.EnableSharing(tagSHARINGCONNECTIONTYPE.ICSSHARINGTYPE_PUBLIC);
+            posnetsc.EnableSharing(tagSHARINGCONNECTIONTYPE.ICSSHARINGTYPE_PRIVATE);
+
+            WMISetIP(posnetguid, posnetip, "255.255.255.0");
+
+            var m = lansc.AddPortMapping("FSP", 17, 2121, 2121, 0, printerip, tagICS_TARGETTYPE.ICSTT_IPADDRESS);
+            m.Enable();
+
+            Console.WriteLine("Sharing on " + lanp.Name + " enabled=" + lansc.SharingEnabled + " , " + posnetp.Name + " enabled=" + posnetsc.SharingEnabled);
+
         }
 
         public static void WMISetIP(string guid, string ip, string mask)
@@ -138,7 +153,6 @@ namespace NatManager
                     continue;
 
                 string guid = entry["Guid"].ToString();
-                Console.WriteLine($"{guid} {description,-30} ");
 
                 if (description.ToLower().Contains("posnet"))
                 {
@@ -157,6 +171,10 @@ namespace NatManager
                     lan = guid;
                 }
             }
+            if (posnet == null)
+                throw new ApplicationException("ERROR: Cannot find printer interface");
+            if (lan == null)
+                throw new ApplicationException("ERROR: Cannot find lan interface");
             srchr = new ManagementObjectSearcher("root\\Microsoft\\HomeNet", "SELECT * FROM HNet_ConnectionProperties"); // WHERE IsIcsPrivate=true or IsIcsPublic=true");
             foreach (ManagementObject entry in srchr.Get())
             {

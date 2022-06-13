@@ -23,10 +23,20 @@ namespace NatManager
                 }
                 else if (args.Length == 3 && args[0] == "hnet")
                 {
-                    NetCleanupSetSharing(args[1], args[2]);
+                    NetSetSharing(args[1], args[2]);
+                }
+                else if (args.Length == 1 && args[0] == "clean")
+                {
+                    NetCleanupSharing();
+                }
+                else if (args.Length == 2 && args[0] == "sleep")
+                {
+                    int miliseconds = 0;
+                    if (int.TryParse(args[1], out miliseconds))
+                        Task.Delay(miliseconds).Wait();
                 }
                 else
-                {
+                        {
                     ShowUsage();
                 }
             }
@@ -41,6 +51,8 @@ namespace NatManager
         {
             Console.WriteLine("Usage:");
             Console.WriteLine("natmanager                                           - show usage");
+            Console.WriteLine("natmanager sleep <miliseconds>                       - sleep miliseconds");
+            Console.WriteLine("natmanager clean                                     - clean up nat");
             Console.WriteLine("natmanager wmi  <printer interface ip> <printer ip>  - set nat using wmi");
             Console.WriteLine("natmanager hnet <printer interface ip> <printer ip>  - set nat and port forwarding using hnetcfg");
             Console.WriteLine();
@@ -56,8 +68,35 @@ namespace NatManager
                     Console.WriteLine($"{p.Name,-30} | {p.DeviceName,-40} | {p.Status.ToString().Substring(4)}");
             }
         }
-        static void NetCleanupSetSharing(string posnetip, string printerip)
-        { 
+        static void NetCleanupSharing()
+        {
+            INetSharingManager SharingManager = new NetSharingManager();
+            foreach (INetConnection n in SharingManager.EnumEveryConnection)
+            {
+                var p = SharingManager.NetConnectionProps[n];
+                var c = SharingManager.INetSharingConfigurationForINetConnection[n];
+
+                if (p.MediaType == tagNETCON_MEDIATYPE.NCM_LAN)
+                {
+                    if (!p.DeviceName.ToLower().Contains("posnet") && !p.DeviceName.ToLower().Contains("hyper-v") && p.Status == tagNETCON_STATUS.NCS_CONNECTED)
+                    {
+                        foreach (INetSharingPortMapping mapping in c.EnumPortMappings[tagSHARINGCONNECTION_ENUM_FLAGS.ICSSC_DEFAULT])
+                        {
+                            if (mapping.Properties.Name == "FSP")
+                            {
+                                mapping.Delete();
+                                break;
+                            }
+                        }
+                    }
+                }
+                if (c.SharingEnabled)
+                    c.DisableSharing();
+                WMICleanup();
+            }
+        }
+        static void NetSetSharing(string posnetip, string printerip)
+        {
             INetSharingManager SharingManager = new NetSharingManager();
             INetSharingConfiguration posnetsc = null;
             string posnetguid = null;
@@ -69,8 +108,6 @@ namespace NatManager
             {
                 var p = SharingManager.NetConnectionProps[n];
                 var c = SharingManager.INetSharingConfigurationForINetConnection[n];
-                if (c.SharingEnabled)
-                    c.DisableSharing();
                 if (p.MediaType == tagNETCON_MEDIATYPE.NCM_LAN)
                 {
                     if (p.DeviceName.ToLower().Contains("posnet"))
@@ -86,7 +123,6 @@ namespace NatManager
                     }
                 }
             }
-            WMICleanup();
 
             if (posnetsc == null)
                 throw new ApplicationException("ERROR: Cannot find printer interface");
@@ -118,7 +154,7 @@ namespace NatManager
                     ManagementBaseObject newIP = objMO.GetMethodParameters("EnableStatic");
 
                     newIP["IPAddress"] = new string[] { ip };
-                    newIP["SubnetMask"] = new string[] { mask};
+                    newIP["SubnetMask"] = new string[] { mask };
 
                     setIP = objMO.InvokeMethod("EnableStatic", newIP, null);
                     break;
@@ -166,7 +202,7 @@ namespace NatManager
                         break;
                     }
                 }
-                else 
+                else
                 {
                     lan = guid;
                 }

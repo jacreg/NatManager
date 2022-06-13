@@ -52,7 +52,7 @@ namespace NatManager
             Console.WriteLine("Usage:");
             Console.WriteLine("natmanager                                           - show usage");
             Console.WriteLine("natmanager sleep <miliseconds>                       - sleep miliseconds");
-            Console.WriteLine("natmanager clean                                     - clean up nat");
+            Console.WriteLine("natmanager clean                                     - clean up nat using wmi and hnetcfg");
             Console.WriteLine("natmanager wmi  <printer interface ip> <printer ip>  - set nat using wmi");
             Console.WriteLine("natmanager hnet <printer interface ip> <printer ip>  - set nat and port forwarding using hnetcfg");
             Console.WriteLine();

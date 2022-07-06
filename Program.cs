@@ -18,7 +18,6 @@ namespace NatManager
             {
                 if (args.Length == 3 && args[0] == "wmi")
                 {
-                    WMICleanup();
                     WMISetSharing(args[1], args[2]);
                 }
                 else if (args.Length == 3 && args[0] == "hnet")
@@ -27,6 +26,7 @@ namespace NatManager
                 }
                 else if (args.Length == 1 && args[0] == "clean")
                 {
+                    WMICleanup();
                     NetCleanupSharing();
                 }
                 else if (args.Length == 2 && args[0] == "sleep")
@@ -92,7 +92,6 @@ namespace NatManager
                 }
                 if (c.SharingEnabled)
                     c.DisableSharing();
-                WMICleanup();
             }
         }
         static void NetSetSharing(string posnetip, string printerip)

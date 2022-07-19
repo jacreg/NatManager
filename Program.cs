@@ -16,18 +16,26 @@ namespace NatManager
         {
             try
             {
-                if (args.Length == 3 && args[0] == "wmi")
+                if (args.Length == 2 && args[0] == "wmi")
                 {
-                    WMISetSharing(args[1], args[2]);
+                    WMISetSharing(args[1]);
                 }
-                else if (args.Length == 3 && args[0] == "hnet")
+                else if (args.Length == 2 && args[0] == "hnet")
                 {
-                    NetSetSharing(args[1], args[2]);
+                    NetSetSharing(args[1]);
+                }
+                else if (args.Length == 2 && args[0] == "map")
+                {
+                    NetSetMapping(args[1]);
                 }
                 else if (args.Length == 1 && args[0] == "clean")
                 {
                     WMICleanup();
                     NetCleanupSharing();
+                }
+                else if (args.Length == 1 && args[0] == "cleanmap")
+                {
+                    NetCleanupMapping();
                 }
                 else if (args.Length == 2 && args[0] == "sleep")
                 {
@@ -53,8 +61,10 @@ namespace NatManager
             Console.WriteLine("natmanager                                           - show usage");
             Console.WriteLine("natmanager sleep <miliseconds>                       - sleep miliseconds");
             Console.WriteLine("natmanager clean                                     - clean up nat using wmi and hnetcfg");
-            Console.WriteLine("natmanager wmi  <printer interface ip> <printer ip>  - set nat using wmi");
-            Console.WriteLine("natmanager hnet <printer interface ip> <printer ip>  - set nat and port forwarding using hnetcfg");
+            Console.WriteLine("natmanager cleanmap                                  - clean up nat map using hnetcfg");
+            Console.WriteLine("natmanager wmi  <printer interface ip>               - set nat using wmi");
+            Console.WriteLine("natmanager hnet <printer interface ip> <printer ip>  - set nat using hnetcfg");
+            Console.WriteLine("natmanager map <printer ip>                          - set port forwarding using hnetcfg");
             Console.WriteLine();
 
             INetSharingManager SharingManager = new NetSharingManager();
@@ -68,7 +78,7 @@ namespace NatManager
                     Console.WriteLine($"{p.Name,-30} | {p.DeviceName,-40} | {p.Status.ToString().Substring(4)}");
             }
         }
-        static void NetCleanupSharing()
+        static void NetCleanupMapping()
         {
             INetSharingManager SharingManager = new NetSharingManager();
             foreach (INetConnection n in SharingManager.EnumEveryConnection)
@@ -84,17 +94,28 @@ namespace NatManager
                         {
                             if (mapping.Properties.Name == "FSP")
                             {
+                                mapping.Disable();
                                 mapping.Delete();
                                 break;
                             }
                         }
                     }
                 }
+            }
+
+        }
+        static void NetCleanupSharing()
+        {
+            INetSharingManager SharingManager = new NetSharingManager();
+            foreach (INetConnection n in SharingManager.EnumEveryConnection)
+            {
+                var c = SharingManager.INetSharingConfigurationForINetConnection[n];
+
                 if (c.SharingEnabled)
                     c.DisableSharing();
             }
         }
-        static void NetSetSharing(string posnetip, string printerip)
+        static void NetSetSharing(string posnetip)
         {
             INetSharingManager SharingManager = new NetSharingManager();
             INetSharingConfiguration posnetsc = null;
@@ -133,10 +154,37 @@ namespace NatManager
 
             WMISetIP(posnetguid, posnetip, "255.255.255.0");
 
+
+            Console.WriteLine("Sharing on " + lanp.Name + " (public) enabled=" + lansc.SharingEnabled + " , " + posnetp.Name + " (private) enabled=" + posnetsc.SharingEnabled);
+        }
+        static void NetSetMapping(string printerip)
+        {
+            INetSharingManager SharingManager = new NetSharingManager();
+            INetSharingConfiguration lansc = null;
+            INetConnectionProps lanp = null;
+
+            foreach (INetConnection n in SharingManager.EnumEveryConnection)
+            {
+                var p = SharingManager.NetConnectionProps[n];
+                var c = SharingManager.INetSharingConfigurationForINetConnection[n];
+                if (p.MediaType == tagNETCON_MEDIATYPE.NCM_LAN)
+                {
+                    if (!p.DeviceName.ToLower().Contains("posnet") && !p.DeviceName.ToLower().Contains("hyper-v") && p.Status == tagNETCON_STATUS.NCS_CONNECTED)
+                    {
+                        lansc = c;
+                        lanp = p;
+                    }
+                }
+            }
+
+            if (lansc == null)
+                throw new ApplicationException("ERROR: Cannot find lan interface");
+
+
             var m = lansc.AddPortMapping("FSP", 17, 2121, 2121, 0, printerip, tagICS_TARGETTYPE.ICSTT_IPADDRESS);
             m.Enable();
 
-            Console.WriteLine("Sharing on " + lanp.Name + " enabled=" + lansc.SharingEnabled + " , " + posnetp.Name + " enabled=" + posnetsc.SharingEnabled);
+            Console.WriteLine("Mapping on " + lanp.Name + " (public) enabled=" + lansc.SharingEnabled );
 
         }
 
@@ -174,7 +222,7 @@ namespace NatManager
                 entry.Put(options);
             }
         }
-        public static void WMISetSharing(string posnetip, string printerip)
+        public static void WMISetSharing(string posnetip)
         {
             var options = new PutOptions();
             options.Type = PutType.UpdateOnly;

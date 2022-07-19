@@ -63,7 +63,7 @@ namespace NatManager
             Console.WriteLine("natmanager clean                                     - clean up nat using wmi and hnetcfg");
             Console.WriteLine("natmanager cleanmap                                  - clean up nat map using hnetcfg");
             Console.WriteLine("natmanager wmi  <printer interface ip>               - set nat using wmi");
-            Console.WriteLine("natmanager hnet <printer interface ip> <printer ip>  - set nat using hnetcfg");
+            Console.WriteLine("natmanager hnet <printer interface ip>               - set nat using hnetcfg");
             Console.WriteLine("natmanager map <printer ip>                          - set port forwarding using hnetcfg");
             Console.WriteLine();
 

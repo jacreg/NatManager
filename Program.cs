@@ -192,6 +192,8 @@ namespace NatManager
             if (!string.IsNullOrEmpty(languid))
                 WMISetDHCP(languid);
 
+            Console.WriteLine("DHCP on " + lanp.Name + " (public) enabled");
+
         }
 
         public static void WMISetDHCP(string guid)

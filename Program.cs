@@ -162,6 +162,7 @@ namespace NatManager
             INetSharingManager SharingManager = new NetSharingManager();
             INetSharingConfiguration lansc = null;
             INetConnectionProps lanp = null;
+            string languid = null;
 
             foreach (INetConnection n in SharingManager.EnumEveryConnection)
             {
@@ -173,6 +174,7 @@ namespace NatManager
                     {
                         lansc = c;
                         lanp = p;
+                        languid = p.Guid;
                     }
                 }
             }
@@ -183,9 +185,28 @@ namespace NatManager
 
             var m = lansc.AddPortMapping("FSP", 17, 2121, 2121, 0, printerip, tagICS_TARGETTYPE.ICSTT_IPADDRESS);
             m.Enable();
+            
 
             Console.WriteLine("Mapping on " + lanp.Name + " (public) enabled=" + lansc.SharingEnabled );
 
+            if (!string.IsNullOrEmpty(languid))
+                WMISetDHCP(languid);
+
+        }
+
+        public static void WMISetDHCP(string guid)
+        {
+            ManagementClass objMC = new ManagementClass("Win32_NetworkAdapterConfiguration");
+            ManagementObjectCollection objMOC = objMC.GetInstances();
+
+            foreach (ManagementObject objMO in objMOC)
+            {
+                if ((bool)objMO["IPEnabled"] && objMO["SettingID"].Equals(guid))
+                {                    
+                    var res = objMO.InvokeMethod("EnableDHCP", null);
+                    break;
+                }
+            }
         }
 
         public static void WMISetIP(string guid, string ip, string mask)

@@ -28,6 +28,10 @@ namespace NatManager
                 {
                     NetSetMapping(args[1]);
                 }
+                else if ((args.Length == 1 || args.Length == 2) && args[0] == "dhcp")
+                {
+                    WMISetDHCP(args.Length == 1 ? "" : args[1]);
+                }
                 else if (args.Length == 1 && args[0] == "clean")
                 {
                     WMICleanup();
@@ -44,7 +48,7 @@ namespace NatManager
                         Task.Delay(miliseconds).Wait();
                 }
                 else
-                        {
+                {
                     ShowUsage();
                 }
             }
@@ -65,10 +69,11 @@ namespace NatManager
             Console.WriteLine("natmanager wmi  <printer interface ip>               - set nat using wmi");
             Console.WriteLine("natmanager hnet <printer interface ip>               - set nat using hnetcfg");
             Console.WriteLine("natmanager map <printer ip>                          - set port forwarding using hnetcfg");
+            Console.WriteLine("natmanager dhcp                                      - set dhcp using wmi");
             Console.WriteLine();
 
             INetSharingManager SharingManager = new NetSharingManager();
-            Console.WriteLine("Sharing {0}, interfaces:", SharingManager.SharingInstalled ? "installed" : "not installed");
+            Console.WriteLine("Sharing {0}, SharingManager.EnumEveryConnection:", SharingManager.SharingInstalled ? "installed" : "not installed");
             Console.WriteLine($"{"Name",-30} | {"DeviceName",-40} | Status");
             Console.WriteLine($"{new string('-', 30)} | {new string('-', 40)} | {new string('-', 20)}");
             foreach (INetConnection n in SharingManager.EnumEveryConnection)
@@ -77,6 +82,17 @@ namespace NatManager
                 if (p.MediaType == tagNETCON_MEDIATYPE.NCM_LAN)
                     Console.WriteLine($"{p.Name,-30} | {p.DeviceName,-40} | {p.Status.ToString().Substring(4)}");
             }
+            Console.WriteLine();
+
+            var srchr = new ManagementObjectSearcher("SELECT * FROM Win32_NetworkAdapter WHERE NetConnectionStatus=2");
+            Console.WriteLine("SELECT Win32_NetworkAdapter WHERE NetConnectionStatus=2:");
+            Console.WriteLine($"{"DeviceName",-40} | {"Description",-40} | AdapterType");
+            Console.WriteLine($"{new string('-', 40)} | {new string('-', 40)} | {new string('-', 20)}");
+            foreach (ManagementObject entry in srchr.Get())
+            {
+                Console.WriteLine($"{entry["Name"],-40} | {entry["Description"],-40} | {entry["AdapterType"]}");
+            }
+            Console.WriteLine();
         }
         static void NetCleanupMapping()
         {
@@ -185,18 +201,43 @@ namespace NatManager
 
             var m = lansc.AddPortMapping("FSP", 17, 2121, 2121, 0, printerip, tagICS_TARGETTYPE.ICSTT_IPADDRESS);
             m.Enable();
-            
 
-            Console.WriteLine("Mapping on " + lanp.Name + " (public) enabled=" + lansc.SharingEnabled );
 
-            if (!string.IsNullOrEmpty(languid))
-                WMISetDHCP(languid);
+            Console.WriteLine("Mapping on " + lanp.Name + " (public) enabled=" + lansc.SharingEnabled);
 
-            Console.WriteLine("DHCP on " + lanp.Name + " (public) enabled");
 
         }
+        public static void WMISetDHCP(string searchdescription)
+        {
+            var options = new PutOptions();
+            options.Type = PutType.UpdateOnly;
+            var srchr = new ManagementObjectSearcher("SELECT * FROM Win32_NetworkAdapter WHERE AdapterType='Ethernet 802.3' and NetConnectionStatus=2");
+            string lan = null;
+            string languid = null;
+            foreach (ManagementObject entry in srchr.Get())
+            {
+                string description = entry["Description"].ToString();
+                if (description.ToLower().Contains("hyper-v"))
+                    continue;
 
-        public static void WMISetDHCP(string guid)
+                if (description.ToLower().Contains("posnet"))
+                    continue;
+
+                if (!string.IsNullOrEmpty(searchdescription) && !description.ToLower().Contains(searchdescription))
+                    continue;
+
+                lan = description;
+                languid = entry["Guid"].ToString();
+            }
+            if (languid == null)
+                throw new ApplicationException($"ERROR: Cannot find lan interface {searchdescription}");
+
+            WMISetDHCPGuid(languid);
+
+            Console.WriteLine("DHCP on " + lan + " (public) enabled");
+        }
+
+        public static void WMISetDHCPGuid(string guid)
         {
             ManagementClass objMC = new ManagementClass("Win32_NetworkAdapterConfiguration");
             ManagementObjectCollection objMOC = objMC.GetInstances();
@@ -204,7 +245,7 @@ namespace NatManager
             foreach (ManagementObject objMO in objMOC)
             {
                 if ((bool)objMO["IPEnabled"] && objMO["SettingID"].Equals(guid))
-                {                    
+                {
                     var res = objMO.InvokeMethod("EnableDHCP", null);
                     break;
                 }

@@ -24,9 +24,17 @@ namespace NatManager
                 {
                     NetSetSharing(args[1]);
                 }
+                else if (args.Length == 4 && args[0] == "hnet")
+                {
+                    NetSetSharing(args[1], args[2], args[3]);
+                }
                 else if (args.Length == 2 && args[0] == "map")
                 {
                     NetSetMapping(args[1]);
+                }
+                else if (args.Length == 3 && args[0] == "map")
+                {
+                    NetSetMapping(args[1], args[2]);
                 }
                 else if ((args.Length == 1 || args.Length == 2) && args[0] == "dhcp")
                 {
@@ -68,7 +76,9 @@ namespace NatManager
             Console.WriteLine("natmanager cleanmap                                  - clean up nat map using hnetcfg");
             Console.WriteLine("natmanager wmi  <printer interface ip>               - set nat using wmi");
             Console.WriteLine("natmanager hnet <printer interface ip>               - set nat using hnetcfg");
+            Console.WriteLine("natmanager hnet <printer interface ip> <public> <private>  - set nat using hnetcfg");
             Console.WriteLine("natmanager map <printer ip>                          - set port forwarding using hnetcfg");
+            Console.WriteLine("natmanager map <printer ip> <public>                 - set port forwarding using hnetcfg");
             Console.WriteLine("natmanager dhcp                                      - set dhcp using wmi");
             Console.WriteLine();
 
@@ -131,7 +141,7 @@ namespace NatManager
                     c.DisableSharing();
             }
         }
-        static void NetSetSharing(string posnetip)
+        static void NetSetSharing(string posnetip, string publicInterface = "", string privateInterface = "")
         {
             INetSharingManager SharingManager = new NetSharingManager();
             INetSharingConfiguration posnetsc = null;
@@ -146,7 +156,21 @@ namespace NatManager
                 var c = SharingManager.INetSharingConfigurationForINetConnection[n];
                 if (p.MediaType == tagNETCON_MEDIATYPE.NCM_LAN)
                 {
-                    if (p.DeviceName.ToLower().Contains("posnet"))
+                    if (!string.IsNullOrEmpty(publicInterface) && !string.IsNullOrEmpty(privateInterface))
+                    {
+                        if (p.Name == publicInterface)
+                        {
+                            lansc = c;
+                            lanp = p;
+                        }
+                        if (p.Name == privateInterface)
+                        {
+                            posnetsc = c;
+                            posnetguid = p.Guid;
+                            posnetp = p;
+                        }
+                    }
+                    else if (p.DeviceName.ToLower().Contains("posnet"))
                     {
                         posnetsc = c;
                         posnetguid = p.Guid;
@@ -173,7 +197,7 @@ namespace NatManager
 
             Console.WriteLine("Sharing on " + lanp.Name + " (public) enabled=" + lansc.SharingEnabled + " , " + posnetp.Name + " (private) enabled=" + posnetsc.SharingEnabled);
         }
-        static void NetSetMapping(string printerip)
+        static void NetSetMapping(string printerip, string publicInterface = "")
         {
             INetSharingManager SharingManager = new NetSharingManager();
             INetSharingConfiguration lansc = null;
@@ -186,7 +210,16 @@ namespace NatManager
                 var c = SharingManager.INetSharingConfigurationForINetConnection[n];
                 if (p.MediaType == tagNETCON_MEDIATYPE.NCM_LAN)
                 {
-                    if (!p.DeviceName.ToLower().Contains("posnet") && !p.DeviceName.ToLower().Contains("hyper-v") && p.Status == tagNETCON_STATUS.NCS_CONNECTED)
+                    if (!string.IsNullOrEmpty(publicInterface))
+                    {
+                        if (p.Name == publicInterface)
+                        {
+                            lansc = c;
+                            lanp = p;
+                            languid = p.Guid;
+                        }
+                    }
+                    else if (!p.DeviceName.ToLower().Contains("posnet") && !p.DeviceName.ToLower().Contains("hyper-v") && p.Status == tagNETCON_STATUS.NCS_CONNECTED)
                     {
                         lansc = c;
                         lanp = p;
